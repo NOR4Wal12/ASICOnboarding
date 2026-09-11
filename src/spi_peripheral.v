@@ -82,7 +82,7 @@ module spi_peripheral (
             en_reg_pwm_7_0 <= 8'b0;
             en_reg_pwm_15_8 <= 8'b0;
             pwm_duty_cycle <= 8'b0;
-        end else if (bits_done == 5'd16 && nCS_rising) begin
+        end else if ((bits_done >= 5'd16) && nCS_rising) begin
             if (data[15]) begin
                 case (data[14:8])
                     7'd0: en_reg_out_7_0 <= data[7:0];
