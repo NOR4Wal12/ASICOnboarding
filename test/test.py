@@ -152,10 +152,115 @@ async def test_spi(dut):
 @cocotb.test()
 async def test_pwm_freq(dut):
     # Write your test here
-    dut._log.info("PWM Frequency test completed successfully")
 
+    clock = Clock(dut.clk, 100, units="ns")
+    cocotb.start_soon(clock.start())
+
+    # Reset
+    dut._log.info("Reset")
+    dut.ena.value = 1
+    ncs = 1
+    bit = 0
+    sclk = 0
+    dut.ui_in.value = ui_in_logicarray(ncs, bit, sclk)
+    dut.rst_n.value = 0
+    await ClockCycles(dut.clk, 5)
+    dut.rst_n.value = 1
+    await ClockCycles(dut.clk, 5)
+
+    ui_in_val = await send_spi_transaction(dut, 1, 0x00, 0x01)
+    ui_in_val = await send_spi_transaction(dut, 1, 0x02, 0x01)
+    await send_spi_transaction(dut, 1, 0x04, 0x80)
+    dut._log.info("Write transaction, address 0x04, start PWM")
+    freq = 3000
+    
+    while dut.uo_out.value != 0:
+        await ClockCycles(dut.clk,1)
+
+    while dut.uo_out.value == 0:
+        await ClockCycles(dut.clk,1)
+
+    t1 = cocotb.utils.get_sim_time(units="ns")
+    while dut.uo_out.value != 0:
+        await ClockCycles(dut.clk,1)
+    while dut.uo_out.value == 0:
+        await ClockCycles(dut.clk,1)
+
+    t2 = cocotb.utils.get_sim_time(units="ns")
+
+    time_delta_ns = t2 - t1
+
+    assert time_delta_ns > 0, f"Zero time delta measured"
+    measured_freq = 1e9 / time_delta_ns
+
+    assert abs(measured_freq - freq) < 0.01*freq, f"Freq was {(int)(measured_freq)}"
+    
+    await ClockCycles(dut.clk, 30000)
+    dut._log.info("PWM Frequency test completed successfully")
 
 @cocotb.test()
 async def test_pwm_duty(dut):
     # Write your test here
+    clock = Clock(dut.clk, 100, units="ns")
+    cocotb.start_soon(clock.start())
+
+    # Reset
+    dut._log.info("Reset")
+    dut.ena.value = 1
+    ncs = 1
+    bit = 0
+    sclk = 0
+    dut.ui_in.value = ui_in_logicarray(ncs, bit, sclk)
+    dut.rst_n.value = 0
+    await ClockCycles(dut.clk, 5)
+    dut.rst_n.value = 1
+    await ClockCycles(dut.clk, 5)
+
+    await send_spi_transaction(dut, 1, 0x00, 0x01)
+    await send_spi_transaction(dut, 1, 0x02, 0x01)
+    
+    #for i in range(1, 254):
+    await send_spi_transaction(dut, 1, 0x04, 0x80)
+    cycles = 0
+    await ClockCycles(dut.clk,100)
+    while dut.uo_out.value != 0:
+        await ClockCycles(dut.clk,1)
+
+    while dut.uo_out.value == 0:
+        await ClockCycles(dut.clk,1)
+
+    t1 = cocotb.utils.get_sim_time(units="ns")
+    while dut.uo_out.value != 0:
+        await ClockCycles(dut.clk,1)
+        cycles+=1
+
+    t2 = cocotb.utils.get_sim_time(units="ns")
+    while dut.uo_out.value == 0:
+        await ClockCycles(dut.clk,1)
+        cycles+=1
+
+    t3 = cocotb.utils.get_sim_time(units="ns")
+
+    period = t3 - t1
+    high_time = t2 - t1
+    duty_cycle = high_time/period
+
+    assert abs(duty_cycle - 0.5) < 0.01, f"50% duty cycle was {(int)(duty_cycle * 100)}, expected 50%"
+    await ClockCycles(dut.clk, 1000)
+
+    #0% test
+    await send_spi_transaction(dut, 1, 0x04, 0x00)
+    for i in range(2*cycles):
+        await ClockCycles(dut.clk, 1)
+        assert dut.uo_out.value == 0, f"0% duty cycle flipped to 1"
+
+    #100% test
+    await send_spi_transaction(dut, 1, 0x04, 0xFF)
+    for i in range(2*cycles):
+        await ClockCycles(dut.clk, 1)
+        assert dut.uo_out.value == 1, f"100% duty cycle flipped to 0"
+
+    
+    await ClockCycles(dut.clk, 30000)
     dut._log.info("PWM Duty Cycle test completed successfully")
+
